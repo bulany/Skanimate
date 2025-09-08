@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <link rel="manifest" href="manifest.webmanifest">
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js'));
+    }
+  </script>
+  <title>Daily Sketch</title>
+  <style>
+    :root {
+      --grid: 80px;           /* grid spacing */
+      --grid-alpha: 0.28;     /* grid opacity */
+      --pad: 12px;
+      --ui: 16px;
+      --accent: #ff3b30;      /* iOS red */
+    }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      background: #000;
+      color: #fff;
+      font-family: -apple-system, system-ui, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: manipulation;
+    }
+    .stage {
+      position: fixed; inset: 0; display: grid; place-items: center;
+    }
+    .square {
+      position: relative;
+      width: min(100vw, 100vh);
+      height: min(100vw, 100vh); /* perfect square that fits the screen */
+      background: #000;
+    }
+    .img, .grid { position: absolute; inset: 0; }
+    .img { object-fit: contain; width: 100%; height: 100%; filter: contrast(1.05); }
+
+    /* GRID STYLES */
+    .grid.hidden { display: none; }
+    .grid.lines {
+      background-image:
+        repeating-linear-gradient(0deg,
+          rgba(255,59,48,var(--grid-alpha)) 0,
+          rgba(255,59,48,var(--grid-alpha)) 1px,
+          transparent 1px,
+          transparent var(--grid)),
+        repeating-linear-gradient(90deg,
+          rgba(255,59,48,var(--grid-alpha)) 0,
+          rgba(255,59,48,var(--grid-alpha)) 1px,
+          transparent 1px,
+          transparent var(--grid));
+      background-size: var(--grid) var(--grid), var(--grid) var(--grid);
+    }
+    .grid.dots {
+      background-image: radial-gradient(rgba(255,59,48,var(--grid-alpha)) 1.5px, transparent 2px);
+      background-size: var(--grid) var(--grid);
+      background-position: 0 0;
+    }
+
+    /* UI OVERLAYS IN THE REMAINING SPACE */
+    .hud {
+      position: fixed; inset: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+      pointer-events: none;
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+    }
+    .topbar, .bottombar { display: flex; align-items: center; justify-content: space-between; padding: var(--pad); gap: 10px; }
+    .pill {
+      pointer-events: auto;
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 16px;
+      padding: 6px 10px;
+      font-size: var(--ui);
+      display: inline-flex; align-items: center; gap: 8px;
+      -webkit-backdrop-filter: blur(6px);
+      backdrop-filter: blur(6px);
+    }
+    .number { font-weight: 700; letter-spacing: 0.5px; }
+    .timer { font-variant-numeric: tabular-nums; font-weight: 600; }
+    .btn {
+      pointer-events: auto;
+      border: none; border-radius: 999px; padding: 10px 16px; font-size: var(--ui);
+      background: #111; color: #fff; border: 1px solid #333;
+    }
+    .btn:active { transform: translateY(1px); }
+    .btn.primary { background: var(--accent); border-color: #b72a22; }
+    .btn.ghost { background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.14); }
+    .controls { display: flex; gap: 8px; align-items: center; }
+    .range { pointer-events: auto; }
+
+    /* Simple help */
+    .hint { opacity: 0.6; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="stage">
+    <div class="square" id="square">
+      <img id="img" class="img" alt="frame" />
+      <div id="grid" class="grid lines"></div>
+    </div>
+  </div>
+  <div class="hud">
+    <div class="topbar">
+      <div class="pill"><span class="number" id="count">1/30</span></div>
+      <div class="pill timer" id="timer">05:00</div>
+    </div>
+    <div></div>
+    <div class="bottombar">
+      <div class="controls">
+        <button class="btn primary" id="toggle">Start</button>
+        <button class="btn ghost" id="prev">◀︎</button>
+        <button class="btn ghost" id="next">▶︎</button>
+      </div>
+      <div class="controls">
+        <select class="btn ghost" id="gridMode">
+          <option value="lines">Grid</option>
+          <option value="dots">Dots</option>
+          <option value="hidden">None</option>
+        </select>
+        <input class="range" id="gridSize" type="range" min="24" max="160" value="80" />
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // === CONFIG ===
+    const TOTAL = 30;                 // images per set
+    const IMAGE_PREFIX = "images/frame_";   // folder holding 01.png, 02.png, ...
+    const IMAGE_PAD = 2;              // filename zero-padding
+    const START_SECONDS = 5 * 60;     // 5 minutes
+    const KEY = 'daily-sketch-v1';    // localStorage key (bump to reset)
+
+    const $ = (id) => document.getElementById(id);
+    const img = $('img');
+  </script>
+  <script>
+    const imgEl = document.getElementById('img');
+    const gridEl = document.getElementById('grid');
+    const countEl = document.getElementById('count');
+    const timerEl = document.getElementById('timer');
+    const toggleBtn = document.getElementById('toggle');
+    const prevBtn = document.getElementById('prev');
+    const nextBtn = document.getElementById('next');
+    const gridModeSel = document.getElementById('gridMode');
+    const gridSizeRange = document.getElementById('gridSize');
+
+    // State
+    const loadState = () => JSON.parse(localStorage.getItem(KEY) || '{}');
+    const saveState = (s) => localStorage.setItem(KEY, JSON.stringify(s));
+    let state = Object.assign({ i: 1, left: START_SECONDS, running: false, gridMode: 'lines', grid: 80 }, loadState());
+
+    function pad(n, w=IMAGE_PAD) { return String(n).padStart(w, '0'); }
+    function path(i) { return `${IMAGE_PREFIX}${pad(i)}.png`; }
+
+    function show(i) {
+      state.i = i = Math.min(Math.max(1, i), TOTAL);
+      imgEl.src = path(i);
+      countEl.textContent = `${i}/${TOTAL}`;
+      saveState(state);
+    }
+
+    function fmt(sec) {
+      const m = Math.floor(sec / 60); const s = sec % 60; return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+    }
+
+    let raf = null, lastTs = null;
+    function tick(ts) {
+      if (!state.running) return;
+      if (lastTs == null) lastTs = ts;
+      const dt = (ts - lastTs) / 1000;
+      if (dt >= 1) {
+        state.left = Math.max(0, Math.round(state.left - dt));
+        lastTs = ts;
+        timerEl.textContent = fmt(state.left);
+        saveState(state);
+        if (state.left <= 0) {
+          state.running = false;
+          toggleBtn.textContent = 'Start';
+          // Auto-advance to next image
+          if (state.i < TOTAL) {
+            show(state.i + 1);
+            state.left = START_SECONDS;
+            timerEl.textContent = fmt(state.left);
+          }
+          saveState(state);
+          return;
+        }
+      }
+      raf = requestAnimationFrame(tick);
+    }
+
+    function start() { if (!state.running) { state.running = true; saveState(state); lastTs = null; raf = requestAnimationFrame(tick); toggleBtn.textContent = 'Pause'; } }
+    function pause() { state.running = false; saveState(state); if (raf) cancelAnimationFrame(raf); toggleBtn.textContent = 'Start'; }
+    function toggleTimer() { state.running ? pause() : start(); }
+
+    // Long-press on timer to reset
+    let lpTimer = null;
+    timerEl.addEventListener('touchstart', () => { lpTimer = setTimeout(() => { state.left = START_SECONDS; timerEl.textContent = fmt(state.left); saveState(state); navigator.vibrate?.(50); }, 700); });
+    timerEl.addEventListener('touchend', () => { clearTimeout(lpTimer); });
+    timerEl.addEventListener('click', () => { state.left = START_SECONDS; timerEl.textContent = fmt(state.left); saveState(state); });
+
+    // Buttons
+    toggleBtn.addEventListener('click', toggleTimer);
+    prevBtn.addEventListener('click', () => { show(state.i - 1); });
+    nextBtn.addEventListener('click', () => { show(state.i + 1); });
+
+    // Grid controls
+    function applyGrid() {
+      gridEl.className = `grid ${state.gridMode}`;
+      gridEl.style.setProperty('--grid', state.grid + 'px');
+    }
+    gridModeSel.value = state.gridMode;
+    gridSizeRange.value = state.grid;
+    gridModeSel.addEventListener('change', e => { state.gridMode = e.target.value; applyGrid(); saveState(state); });
+    gridSizeRange.addEventListener('input', e => { state.grid = parseInt(e.target.value, 10); applyGrid(); saveState(state); });
+
+    // Tap anywhere on the square to start/pause
+    document.getElementById('square').addEventListener('click', (e) => {
+      if (e.target.closest('.btn, select, input')) return; // ignore UI
+      toggleTimer();
+    });
+
+    // Boot
+    show(state.i);
+    timerEl.textContent = fmt(state.left);
+    applyGrid();
+  </script>
+</body>
+</html>

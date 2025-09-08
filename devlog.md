@@ -1,3 +1,10 @@
+# 06/09/2025
+```bash
+# Get local ip address on mac
+ipconfig getifaddr en0
+```
+Get client side going
+
 # 05/09/2025
 ```bash
 START="00:00:03.0"
