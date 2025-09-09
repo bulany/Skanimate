@@ -1,3 +1,7 @@
+# 09/09/2025
+Got the chatgpt version of index.html running locally on an iPhone by putting index.html and the images folder into Firefox iOS downloads folder and running it from there.
+Will run with this for now but PDF option would be a promising offline option also.
+
 # 06/09/2025
 ```bash
 # Get local ip address on mac

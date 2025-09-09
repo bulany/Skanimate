@@ -1,0 +1,223 @@
+```html
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Daily Sketch</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => navigator.serviceWorker.register('./sw.js'));
+    }
+  </script>
+  <style>
+    :root {
+      --pad: 12px;
+      --ui: 16px;
+      --accent: #ff3b30;      /* iOS red */
+      --grid-thickness: 2px;
+    }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      background: #000;
+      color: #fff;
+      font-family: -apple-system, system-ui, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: manipulation;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .square {
+      position: relative;
+      width: 100vw;
+      height: 100vw; /* always square at top */
+      background: #000;
+    }
+    .img, .grid { position: absolute; inset: 0; }
+    .img { object-fit: contain; width: 100%; height: 100%; filter: contrast(1.05); }
+
+    /* 3x3 Grid */
+    .grid.lines {
+      background:
+        linear-gradient(to right, transparent calc(100%/3 - var(--grid-thickness)/2), white var(--grid-thickness), transparent calc(100%/3 + var(--grid-thickness)/2)),
+        linear-gradient(to right, transparent calc(200%/3 - var(--grid-thickness)/2), white var(--grid-thickness), transparent calc(200%/3 + var(--grid-thickness)/2)),
+        linear-gradient(to bottom, transparent calc(100%/3 - var(--grid-thickness)/2), white var(--grid-thickness), transparent calc(100%/3 + var(--grid-thickness)/2)),
+        linear-gradient(to bottom, transparent calc(200%/3 - var(--grid-thickness)/2), white var(--grid-thickness), transparent calc(200%/3 + var(--grid-thickness)/2));
+      background-size: 100% 100%;
+    }
+    .grid.hidden { display: none; }
+    .grid-only {
+      background: #fff;
+      background-image:
+        linear-gradient(to right, black var(--grid-thickness), transparent var(--grid-thickness)),
+        linear-gradient(to right, transparent calc(100%/3 - var(--grid-thickness)/2), black var(--grid-thickness), transparent calc(100%/3 + var(--grid-thickness)/2)),
+        linear-gradient(to right, transparent calc(200%/3 - var(--grid-thickness)/2), black var(--grid-thickness), transparent calc(200%/3 + var(--grid-thickness)/2)),
+        linear-gradient(to bottom, black var(--grid-thickness), transparent var(--grid-thickness)),
+        linear-gradient(to bottom, transparent calc(100%/3 - var(--grid-thickness)/2), black var(--grid-thickness), transparent calc(100%/3 + var(--grid-thickness)/2)),
+        linear-gradient(to bottom, transparent calc(200%/3 - var(--grid-thickness)/2), black var(--grid-thickness), transparent calc(200%/3 + var(--grid-thickness)/2));
+      background-size: 100% 100%;
+    }
+
+    .controls {
+      width: 100%;
+      padding: var(--pad);
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: center;
+    }
+    .pill {
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 16px;
+      padding: 6px 10px;
+      font-size: var(--ui);
+      display: inline-flex; align-items: center; gap: 8px;
+      -webkit-backdrop-filter: blur(6px);
+      backdrop-filter: blur(6px);
+    }
+    .number { font-weight: 700; letter-spacing: 0.5px; }
+    .timer { font-variant-numeric: tabular-nums; font-weight: 600; }
+    .btn {
+      border: none; border-radius: 999px; padding: 10px 16px; font-size: var(--ui);
+      background: #111; color: #fff; border: 1px solid #333;
+    }
+    .btn:active { transform: translateY(1px); }
+    .btn.primary { background: var(--accent); border-color: #b72a22; }
+    .btn.ghost { background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.14); }
+  </style>
+</head>
+<body>
+  <div class="square" id="square">
+    <img id="img" class="img" alt="frame" />
+    <div id="grid" class="grid lines"></div>
+  </div>
+  <div class="controls">
+    <div class="pill"><span class="number" id="count">1/30</span></div>
+    <div class="pill timer" id="timer">05:00</div>
+  </div>
+  <div class="controls">
+    <button class="btn primary" id="toggle">Start</button>
+    <button class="btn ghost" id="reset">Reset</button>
+    <button class="btn ghost" id="prev">◀︎</button>
+    <button class="btn ghost" id="next">▶︎</button>
+  </div>
+  <div class="controls">
+    <button class="btn ghost" id="gridToggle">Show Grid</button>
+  </div>
+
+  <script>
+    // === CONFIG ===
+    const TOTAL = 30;
+    const IMAGE_PREFIX = "images/";
+    const IMAGE_PAD = 2;
+    const START_SECONDS = 5 * 60;
+    const KEY = 'daily-sketch-v2';
+
+    const imgEl = document.getElementById('img');
+    const gridEl = document.getElementById('grid');
+    const countEl = document.getElementById('count');
+    const timerEl = document.getElementById('timer');
+    const toggleBtn = document.getElementById('toggle');
+    const resetBtn = document.getElementById('reset');
+    const prevBtn = document.getElementById('prev');
+    const nextBtn = document.getElementById('next');
+    const gridToggleBtn = document.getElementById('gridToggle');
+
+    const loadState = () => JSON.parse(localStorage.getItem(KEY) || '{}');
+    const saveState = (s) => localStorage.setItem(KEY, JSON.stringify(s));
+    let state = Object.assign({ i: 1, left: START_SECONDS, running: false, showGridOnly: false }, loadState());
+
+    function pad(n, w=IMAGE_PAD) { return String(n).padStart(w, '0'); }
+    function path(i) { return `${IMAGE_PREFIX}${pad(i)}.png`; }
+
+    function show(i) {
+      state.i = i = Math.min(Math.max(1, i), TOTAL);
+      imgEl.src = path(i);
+      countEl.textContent = `${i}/${TOTAL}`;
+      saveState(state);
+    }
+
+    function fmt(sec) {
+      const m = Math.floor(sec / 60); const s = sec % 60; return `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+    }
+
+    let raf = null, lastTs = null;
+    function tick(ts) {
+      if (!state.running) return;
+      if (lastTs == null) lastTs = ts;
+      const dt = (ts - lastTs) / 1000;
+      if (dt >= 1) {
+        state.left = Math.max(0, Math.round(state.left - dt));
+        lastTs = ts;
+        timerEl.textContent = fmt(state.left);
+        saveState(state);
+        if (state.left <= 0) {
+          state.running = false;
+          toggleBtn.textContent = 'Start';
+          if (state.i < TOTAL) {
+            show(state.i + 1);
+            state.left = START_SECONDS;
+            timerEl.textContent = fmt(state.left);
+          }
+          saveState(state);
+          return;
+        }
+      }
+      raf = requestAnimationFrame(tick);
+    }
+
+    function start() { if (!state.running) { state.running = true; saveState(state); lastTs = null; raf = requestAnimationFrame(tick); toggleBtn.textContent = 'Pause'; } }
+    function pause() { state.running = false; saveState(state); if (raf) cancelAnimationFrame(raf); toggleBtn.textContent = 'Start'; }
+    function toggleTimer() { state.running ? pause() : start(); }
+    function resetTimer() { state.left = START_SECONDS; timerEl.textContent = fmt(state.left); saveState(state); }
+
+    toggleBtn.addEventListener('click', toggleTimer);
+    resetBtn.addEventListener('click', resetTimer);
+    prevBtn.addEventListener('click', () => { show(state.i - 1); });
+    nextBtn.addEventListener('click', () => { show(state.i + 1); });
+
+    gridToggleBtn.addEventListener('click', () => {
+      state.showGridOnly = !state.showGridOnly;
+      if (state.showGridOnly) {
+        imgEl.style.display = 'none';
+        gridEl.className = 'grid-only';
+        gridToggleBtn.textContent = 'Hide Grid';
+      } else {
+        imgEl.style.display = '';
+        gridEl.className = 'grid lines';
+        gridToggleBtn.textContent = 'Show Grid';
+      }
+      saveState(state);
+    });
+
+    // Boot
+    show(state.i);
+    timerEl.textContent = fmt(state.left);
+    if (state.showGridOnly) {
+      imgEl.style.display = 'none';
+      gridEl.className = 'grid-only';
+      gridToggleBtn.textContent = 'Hide Grid';
+    }
+  </script>
+</body>
+</html>
+
+
+```
+
+
+I’ve added everything you asked for:
+
+1. Manifest and service worker loader in `<head>`.
+2. Simplified 3×3 grid overlay (center aligned).
+3. Reset button to set the timer back to 5 minutes.
+4. Layout: square image locked to top, controls underneath.
+5. “Show Grid” toggle → grid-only mode with black lines on white background (adjustable thickness).
+6. Service worker caching left as-is, but code structured to not break your current setup.
+
+Want me to also adjust the **service worker file** (`sw.js`) to try pre-caching all images on install so you don’t have to tap through them first?

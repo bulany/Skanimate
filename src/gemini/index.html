@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Skater Flipbook</title>
+    <style>
+        body {
+            background-color: black;
+            color: white;
+            font-family: Arial, sans-serif;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+            flex-direction: column;
+        }
+
+        #image-container {
+            position: relative;
+            width: 100vmin; /* Max width based on viewport min dimension */
+            height: 100vmin;
+            max-width: 90vh; /* Adjust as needed */
+            max-height: 90vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        #drawing-image {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+            filter: grayscale(100%); /* Just in case */
+        }
+        
+        .grid-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-image: 
+                repeating-linear-gradient(0deg, red 0, red 1px, transparent 1px, transparent calc(100% / 5)),
+                repeating-linear-gradient(90deg, red 0, red 1px, transparent 1px, transparent calc(100% / 5));
+            background-size: 20% 20%, 20% 20%;
+            pointer-events: none; /* Allows clicks to go through */
+            opacity: 0.3; /* Subtle grid */
+        }
+
+        #info-overlay {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            font-size: 2em;
+            font-weight: bold;
+        }
+
+        #timer-display {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            font-size: 2em;
+            font-weight: bold;
+        }
+        
+        #button-container {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+        
+        #timer-button {
+            padding: 10px 20px;
+            font-size: 1.5em;
+            background-color: #333;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        
+        #image-selector {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="image-container">
+        <img id="drawing-image" src="" alt="Skater drawing">
+        <div class="grid-overlay"></div>
+        <div id="info-overlay"></div>
+        <div id="timer-display">5:00</div>
+        <div id="button-container">
+            <button id="timer-button">Start Timer</button>
+        </div>
+        <select id="image-selector"></select>
+    </div>
+
+<script>
+    const totalImages = 30;
+    const drawingImages = [];
+    for (let i = 1; i <= totalImages; i++) {
+        const imageNumber = i.toString().padStart(2, '0');
+        drawingImages.push(`images/frame_${imageNumber}.png`);
+    }
+
+    const imageEl = document.getElementById('drawing-image');
+    const infoEl = document.getElementById('info-overlay');
+    const timerDisplayEl = document.getElementById('timer-display');
+    const timerButton = document.getElementById('timer-button');
+    const imageSelector = document.getElementById('image-selector');
+
+    let currentImageIndex = 0;
+    let timer;
+    let timeRemaining = 300; // 5 minutes in seconds
+    let isTimerRunning = false;
+
+    // Load state from localStorage
+    function loadState() {
+        const savedIndex = localStorage.getItem('lastImageIndex');
+        if (savedIndex !== null) {
+            currentImageIndex = parseInt(savedIndex);
+        }
+    }
+
+    // Save state to localStorage
+    function saveState() {
+        localStorage.setItem('lastImageIndex', currentImageIndex);
+    }
+
+    // Update the image and text
+    function updateDisplay() {
+        imageEl.src = drawingImages[currentImageIndex];
+        infoEl.textContent = `${currentImageIndex + 1}/${totalImages}`;
+        imageSelector.value = currentImageIndex;
+        saveState();
+    }
+    
+    // Timer logic
+    function formatTime(seconds) {
+        const minutes = Math.floor(seconds / 60);
+        const remainingSeconds = seconds % 60;
+        return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+    }
+
+    function startTimer() {
+        if (isTimerRunning) return;
+        isTimerRunning = true;
+        timerButton.textContent = 'Pause Timer';
+        timer = setInterval(() => {
+            timeRemaining--;
+            timerDisplayEl.textContent = formatTime(timeRemaining);
+            if (timeRemaining <= 0) {
+                pauseTimer();
+            }
+        }, 1000);
+    }
+    
+    function pauseTimer() {
+        isTimerRunning = false;
+        timerButton.textContent = 'Restart Timer';
+        clearInterval(timer);
+    }
+
+    // Event listeners
+    timerButton.addEventListener('click', () => {
+        if (isTimerRunning) {
+            pauseTimer();
+        } else {
+            startTimer();
+        }
+    });
+    
+    imageSelector.addEventListener('change', (e) => {
+        currentImageIndex = parseInt(e.target.value);
+        pauseTimer(); // Pause timer on image change
+        timeRemaining = 300; // Reset time
+        timerDisplayEl.textContent = formatTime(timeRemaining);
+        updateDisplay();
+    });
+
+    // Initialize the selector
+    function initializeSelector() {
+        for (let i = 0; i < totalImages; i++) {
+            const option = document.createElement('option');
+            option.value = i;
+            option.textContent = `Image ${i + 1}`;
+            imageSelector.appendChild(option);
+        }
+    }
+
+    // Initialize on page load
+    window.onload = () => {
+        loadState();
+        initializeSelector();
+        updateDisplay();
+    };
+</script>
+</body>
+</html>
