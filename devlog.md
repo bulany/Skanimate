@@ -1,3 +1,27 @@
+# 09/10/2025
+Processing the handdrawn images...
+```bash
+# Get imagemagick tools
+brew install imagemagick
+# Rotate all frames 180 degrees
+mogrify -rotate 180 frame_*.JPG
+
+magick frame_00020.JPG -crop 1800x1800+1500+700 test5.jpg && open test5.jpg
+mogrify -crop 2000x2000+1500+500 frame_*.JPG
+
+# Oh the cropping is really hard!
+# use ffmpeg instead!
+ffmpeg -framerate 5 -i frame_%05d.jpg -c:v libx264 -pix_fmt yuv420p step1_stitched.mp4
+
+ffmpeg -framerate 6 -i frame_%05d.jpg -vf "crop=1690:1690:577:1669" -c:v libx264 -pix_fmt yuv420p one_step_01.mp4
+
+ffmpeg -framerate 6 -i frame_%05d.jpg -vf "crop=1500:1500:644:1733" -c:v libx264 -pix_fmt yuv420p one_step_01.mp4
+
+# Getting the next one ready...
+ffmpeg -i daewon.mov -vf fps=10 -q:v 2 images/frame_%02d.jpg
+
+```
+
 # 09/09/2025
 Got the chatgpt version of index.html running locally on an iPhone by putting index.html and the images folder into Firefox iOS downloads folder and running it from there.
 Will run with this for now but PDF option would be a promising offline option also.
