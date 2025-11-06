@@ -1,3 +1,96 @@
+
+# 06/11/2025
+
+Setting up November drawing:
+
+```bash
+# Screen recorded movie on iPhone 
+# Cropped on iPhone
+# Filtered to black and white on iphone
+
+# Got .mov onto laptop and need to rotate it:
+
+ffmpeg -i lee_sedol.mov -vf "transpose=2" -c:a copy input_01.mp4
+
+# actually didn't need to
+vidloop lee_sedol.mov
+
+# slice film up into 25 frames
+../../slice_frames.sh lee_sedol.mov 25 images
+
+```
+
+
+Processing handdrawn images...
+This time, make a film and then crop afterward
+```bash
+
+# need to rename files first!
+a=1
+for i in *.JPG; do 
+  new=$(printf "frame%04d.JPG" "$a")
+  cp -i -- "$i" "../renamed/$new"
+  let a=a+1
+done
+
+# stitch and crop
+ffmpeg -framerate 10 -i "frame%04d.JPG" -vf "crop=1080:1080:844:1464" -c:v libx264 -pix_fmt yuv420p cropped_10.mp4
+
+# preview
+mpv --loop-file=inf --autofit-larger=100%x100% cropped_10.mp4
+
+# adjust crop and preview
+ffmpeg -framerate 10 -i "frame%04d.JPG" -vf "crop=1050:1020:874:1464" -c:v libx264 -pix_fmt yuv420p cropped_10.mp4
+mpv --loop-file=inf --autofit-larger=100%x100% cropped_10.mp4
+
+# Add audio from original mov
+ffmpeg -i daewon_drawn.mp4 -i daewon.mov -c:v copy -c:a aac -map 0:v:0 -map 1:a:0 -shortest daewon_drawn_audio.mp4
+
+# Audio is out of sync!
+
+# Get target duration:
+ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 daewon_drawn.mp4
+# 2.8000
+
+# Get original duration
+ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 daewon.mov
+# 2.796667
+
+# Just write a script...
+ ../../audio_transfer.sh daewon_drawn.mp4 daewon.mov daewon_audio.mp4
+
+
+# Old tests follow...
+
+# Use existing filename ordering and stitch into film
+ffmpeg -framerate 5 -pattern_type glob -i "*.JPG" -c:v libx264 -pix_fmt yuv420p step1_stitched2.mp4
+
+# make it slightly faster
+ffmpeg -framerate 6 -pattern_type glob -i "*.JPG" -c:v libx264 -pix_fmt yuv420p step1_stitched2.mp4
+
+# faster again
+ffmpeg -framerate 7 -pattern_type glob -i "*.JPG" -c:v libx264 -pix_fmt yuv420p step1_stitched3.mp4
+
+# faster still
+ffmpeg -framerate 10 -pattern_type glob -i "*.JPG" -c:v libx264 -pix_fmt yuv420p framerate_10.mp4
+
+# find dimensions
+ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=p=0 framerate_10.mp4
+# 3024, 4032
+
+# 844, 1464 (offset from looking at one photo in preview)
+# 1076 x 1076 (crop dimensions)
+
+# preview crop
+ffplay -i framerate_10.mp4 -vf "crop=1080:1080:844:1464"
+
+# Crop and generate
+ffmpeg -framerate 10 -pattern_type glob -i "*.JPG" -vf "crop=1080:1080:844:1464" -c:v libx264 -pix_fmt yuv420p cropped_10.mp4
+
+
+
+```
+
 # 09/10/2025
 Processing the handdrawn images...
 ```bash
