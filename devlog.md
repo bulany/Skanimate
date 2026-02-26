@@ -1,3 +1,34 @@
+# 26/02/2026
+Got gemini to make a new bash script that splits out the frames with movable crop windows (specified by keyframes).
+ 
+
+# 01/12/2025
+Process:
+1. Take photos of each page, remeber to focus lock camera and put on the grid
+2. Air drop all photos to data/drawings/raw folder
+3. Rename files in vscode integrated terminal
+```bash
+mkdir ../renamed
+a=1
+for i in *.JPG; do 
+  new=$(printf "frame%04d.JPG" "$a")
+  cp -i -- "$i" "../renamed/$new"
+  let a=a+1
+done
+```
+4. Stitch and crop (with 180 degree rotation)
+```bash
+cd ../renamed
+# stitch and crop
+ffmpeg -framerate 10 -i "frame%04d.JPG" -vf "crop=1020:1020:980:1326,vflip,hflip" -c:v libx264 -pix_fmt yuv420p cropped_10.mp4
+
+# preview
+mpv --loop-file=inf --autofit-larger=100%x100% cropped_10.mp4
+
+
+```
+
+
 
 # 06/11/2025
 
@@ -26,6 +57,7 @@ This time, make a film and then crop afterward
 ```bash
 
 # need to rename files first!
+mkdir ../renamed
 a=1
 for i in *.JPG; do 
   new=$(printf "frame%04d.JPG" "$a")
