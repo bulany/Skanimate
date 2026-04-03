@@ -1,3 +1,7 @@
+# 03/02/2026
+Make the film for all the drawings done in march (Richie Jackson)
+
+
 # 26/02/2026
 Got gemini to make a new bash script that splits out the frames with movable crop windows (specified by keyframes).
  
